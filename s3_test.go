@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"strings"
 	"testing"
 
 	ds "github.com/ipfs/go-datastore"
@@ -23,7 +24,7 @@ const bucketName = "YOUR_TEST_BUCKET_NAME"
 
 func newDS(t *testing.T) *Datastore {
 	return NewDatastore(bucketName, func(o *Options) {
-		// o.Region = "us-east-1"
+		o.Region = "us-east-1"
 	})
 }
 
@@ -50,6 +51,26 @@ func addTestCases(t *testing.T, d *Datastore, testcases map[string]string) {
 		}
 	}
 
+}
+
+func TestGet(t *testing.T) {
+	d := newDS(t)
+	expectErrors(func(key ds.Key) error {
+		_, err := d.Get(key)
+		return err
+	}, t)
+}
+
+func TestHas(t *testing.T) {
+	d := newDS(t)
+	if has, err := d.Has(ds.NewKey("/z")); has != false || err != nil {
+		t.Errorf("has on empty key result mismatch: %t != false || %s != nil", has, err)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	d := newDS(t)
+	expectErrors(d.Delete, t)
 }
 
 func TestQuery(t *testing.T) {
@@ -109,6 +130,32 @@ func expectMatches(t *testing.T, expect []string, actualR dsq.Results) {
 		}
 		if !found {
 			t.Error(k, "not found")
+		}
+	}
+}
+
+func expectErrors(fn func(key ds.Key) error, t *testing.T) {
+	errCases := []struct {
+		key   string
+		err   error
+		exact bool
+	}{
+		{"/z", ds.ErrNotFound, true},
+	}
+
+	for i, c := range errCases {
+		got := fn(ds.NewKey(c.key))
+		if got == nil {
+			t.Errorf("no error returned for %d mismatch. %s != %s", i, got, c.err)
+			continue
+		}
+
+		if c.exact {
+			if got != c.err {
+				t.Errorf("error case %d mismatch. %s != %s", i, got, c.err)
+			}
+		} else if !strings.Contains(got.Error(), c.err.Error()) {
+			t.Errorf("error case %d mismatch. %s != %s", i, got, c.err)
 		}
 	}
 }

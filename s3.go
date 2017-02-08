@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -98,6 +100,11 @@ func (ds *Datastore) Get(key datastore.Key) (value interface{}, err error) {
 		Bucket: aws.String(ds.Bucket),
 	})
 	if err != nil {
+		if awsErr, ok := err.(awserr.Error); ok {
+			if awsErr.Code() == "NoSuchKey" {
+				return nil, datastore.ErrNotFound
+			}
+		}
 		return nil, err
 	}
 	defer res.Body.Close()
@@ -117,6 +124,11 @@ func (ds *Datastore) Has(key datastore.Key) (exists bool, err error) {
 	})
 
 	if err != nil {
+		if awsErr, ok := err.(awserr.Error); ok {
+			if awsErr.Code() == "NotFound" {
+				return false, nil
+			}
+		}
 		return false, err
 	}
 	return true, nil
@@ -125,6 +137,13 @@ func (ds *Datastore) Has(key datastore.Key) (exists bool, err error) {
 // Delete a key from the store
 func (ds *Datastore) Delete(key datastore.Key) error {
 	c := ds.client()
+
+	if has, err := ds.Has(key); has == false {
+		return datastore.ErrNotFound
+	} else if err != nil {
+		return err
+	}
+
 	_, err := c.DeleteObject(&awsS3.DeleteObjectInput{
 		Key:    aws.String(ds.path(key)),
 		Bucket: aws.String(ds.Bucket),
