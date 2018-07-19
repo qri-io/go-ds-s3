@@ -92,6 +92,10 @@ func (ds *Datastore) Put(key datastore.Key, value interface{}) error {
 	return err
 }
 
+func (_ *Datastore) Close() error {
+	return nil
+}
+
 // Get an object from the store
 func (ds *Datastore) Get(key datastore.Key) (value interface{}, err error) {
 	c := ds.client()
@@ -222,11 +226,27 @@ func (ds *Datastore) Query(q query.Query) (query.Results, error) {
 	return query.ResultsWithChan(q, reschan), nil
 }
 
-// Batch is an additional required method of the Batching interface, currently unsupported
-// TODO - implement batching interface.
-func (ds *Datastore) Batch() (datastore.Batch, error) {
-	return nil, datastore.ErrBatchUnsupported
+type Batch struct {
+	s *Datastore
 }
+
+func (ds *Datastore) Batch() (datastore.Batch, error) {
+	return &Batch{ds}, nil
+}
+
+func (b *Batch) Put(k datastore.Key, val interface{}) error {
+	return b.s.Put(k, val)
+}
+
+func (b *Batch) Delete(k datastore.Key) error {
+	return b.s.Delete(k)
+}
+
+func (b *Batch) Commit() error {
+	return nil
+}
+
+var _ datastore.Batching = (*Datastore)(nil)
 
 // svc gives an aws.S3 client instance
 func (ds *Datastore) client() *awsS3.S3 {
